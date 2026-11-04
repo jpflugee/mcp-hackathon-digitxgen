@@ -1,24 +1,27 @@
-# watsonx Orchestrate LOCAL MCP toolkit import config.
+# watsonx Orchestrate LOCAL MCP toolkit import config for the GSA JDP toolkit.
 #
 # DO NOT import this file directly. Use the register script:
 #   bash deploy/ibm/local-mcp-toolkit/register-toolkit.sh
 #
-# The register script builds a minimal, self-contained staging directory with a
-# FLATTENED layout — `example_server/` and `server.py` sit directly at
-# package_root (no src/ prefix), plus a pinned requirements.txt — then rewrites
+# The register script builds a minimal staging directory containing only
+# server.py and requirements.txt from tools/gsa_jdp_mcp_toolkit/, then rewrites
 # `package_root` to point at it before calling `orchestrate toolkits import`.
-# This keeps the upload tiny, avoids a 413 "Request Entity Too Large" from
-# uploading the whole repo, and makes `example_server` importable at runtime.
+# This keeps the upload tiny and avoids a 413 "Request Entity Too Large" from
+# uploading the whole repo.
 #
 # Orchestrate uploads package_root, installs requirements.txt, and runs `command`
-# over stdio. `python server.py` imports `example_server.app:mcp` and runs it.
+# over stdio. `python server.py` defines `mcp` at module level and calls
+# mcp.run(transport="stdio") under __main__.
 #
-# This template's server needs NO credentials, so no `connections` are declared.
-# If your server needs secrets, add a connection (see README) and list it here.
+# This server needs NO credentials — all data sources are public APIs.
+# If you add a secret later, add a connection (see README) and list it here.
 spec_version: v1
 kind: mcp
-name: example_mcp_local
-description: "Example MCP server (local stdio). Replace name/description with your own server."
+name: gsa-jdp-toolkit
+description: >
+  GSA AutoNOC Polaris Project toolkit — GSA IOLP location queries,
+  multi-source weather/hazard alerts (NWS, USGS, NOAA SWPC, JMA Japan,
+  DWD Germany, MeteoAlarm Italy), current weather via Open-Meteo.
 command: python server.py
 env: []
 tools:

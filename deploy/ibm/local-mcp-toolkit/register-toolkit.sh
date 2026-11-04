@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Register this MCP server as a LOCAL MCP toolkit in watsonx Orchestrate.
+# Register the GSA JDP MCP server as a LOCAL MCP toolkit in watsonx Orchestrate.
 #
 # A local MCP toolkit ships this server's code to Orchestrate, which installs it
 # (via requirements.txt at package_root) and runs `python server.py` over stdio
@@ -8,7 +8,7 @@
 # Prerequisites:
 #   - Python 3.11-3.14
 #   - ADK installed:  pip install --upgrade ibm-watsonx-orchestrate
-#   - Config:         cp .env.example .env && edit
+#   - Config:         cp deploy/ibm/local-mcp-toolkit/.env.example deploy/ibm/local-mcp-toolkit/.env && edit
 #
 # Usage:
 #   set -a; source deploy/ibm/local-mcp-toolkit/.env; set +a
@@ -28,15 +28,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 STAGE_DIR="${SCRIPT_DIR}/_stage"
 TOOLKIT_YAML="${SCRIPT_DIR}/_toolkit.generated.yaml"
 
-# The package to ship. If you renamed `example_server`, set PACKAGE_NAME to match
-# (or export it before running).
-PACKAGE_NAME="${PACKAGE_NAME:-example_server}"
+# Source directory for the GSA JDP MCP server.
+GSA_TOOLKIT_DIR="${REPO_ROOT}/tools/gsa_jdp_mcp_toolkit"
 
 echo "=== Target ==="
 echo "  env name:      ${WXO_ENV_NAME}"
 echo "  instance URL:  ${WXO_INSTANCE_URL}"
 echo "  toolkit name:  ${TOOLKIT_NAME}"
-echo "  package:       ${PACKAGE_NAME}"
+echo "  source dir:    ${GSA_TOOLKIT_DIR}"
 echo ""
 
 # --- Confirm the ADK is installed ---------------------------------------------
@@ -70,16 +69,13 @@ orchestrate env list
 
 # --- Build a minimal, self-contained staging package_root --------------------
 # Uploading the whole repo hits a 413 (virtualenvs are large) and can fail the
-# server-side install. We stage ONLY what the server needs, FLATTENED out of the
-# src/ layout: `${PACKAGE_NAME}/` sits directly at package_root next to
-# server.py, so it's importable with no install step.
+# server-side install. We stage ONLY the GSA JDP server.py and requirements.txt.
 echo "=== Staging minimal package_root at ${STAGE_DIR} ==="
 rm -rf "${STAGE_DIR}"
 mkdir -p "${STAGE_DIR}"
-cp -R "${REPO_ROOT}/src/${PACKAGE_NAME}" "${STAGE_DIR}/${PACKAGE_NAME}"
-cp "${SCRIPT_DIR}/server.py" "${STAGE_DIR}/server.py"
-cp "${SCRIPT_DIR}/requirements.txt" "${STAGE_DIR}/requirements.txt"
-# Drop caches that may have been copied from src/.
+cp "${GSA_TOOLKIT_DIR}/server.py" "${STAGE_DIR}/server.py"
+cp "${GSA_TOOLKIT_DIR}/requirements.txt" "${STAGE_DIR}/requirements.txt"
+# Drop any caches.
 find "${STAGE_DIR}" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
 STAGE_SIZE="$(du -sh "${STAGE_DIR}" | cut -f1)"
 echo "  staged package_root size: ${STAGE_SIZE}"
@@ -104,5 +100,8 @@ echo ""
 echo "=== Registered ==="
 orchestrate toolkits list
 echo ""
-echo "Next: build/edit an agent in the Orchestrate UI, add the '${TOOLKIT_NAME}'"
-echo "tools, and chat-test a question (see README Part 3)."
+echo "Next steps:"
+echo "  1. Import the agent:"
+echo "       orchestrate agents import -f ${REPO_ROOT}/agents/gsa_jdp_agent.yaml"
+echo "  2. Open watsonx Orchestrate, add the '${TOOLKIT_NAME}' tools to your agent,"
+echo "     and chat-test a question (see README Part 3)."

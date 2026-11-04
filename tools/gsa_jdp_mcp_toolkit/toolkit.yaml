@@ -2,9 +2,17 @@ spec_version: v1
 kind: mcp
 name: gsa-jdp-toolkit
 description: >
-  GSA AutoNOC Polaris Project toolkit — GSA IOLP location queries, 
+  GSA AutoNOC Polaris Project toolkit — GSA IOLP location queries,
   multi-source weather/hazard alerts (NWS, USGS, NOAA SWPC, JMA Japan,
   DWD Germany, MeteoAlarm Italy), current weather via Open-Meteo.
+# Orchestrate runs `python server.py` from package_root over stdio.
+# Import from this directory so package_root: . resolves correctly:
+#
+#   cd tools/gsa_jdp_mcp_toolkit
+#   orchestrate toolkits import -f toolkit.yaml
+#
+# Then import the agent:
+#   orchestrate agents import -f ../../agents/gsa_jdp_agent.yaml
 command: python server.py
 package_root: .
 tools:
