@@ -1,0 +1,11 @@
+spec_version: v1
+kind: mcp
+name: gsa-jdp-toolkit
+description: >
+  GSA AutoNOC Polaris Project toolkit — GSA IOLP location queries, 
+  multi-source weather/hazard alerts (NWS, USGS, NOAA SWPC, JMA Japan,
+  DWD Germany, MeteoAlarm Italy), current weather via Open-Meteo.
+command: python server.py
+package_root: .
+tools:
+  - "*"
