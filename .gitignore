@@ -6,3 +6,4 @@ __pycache__/
 .bob/
 *.tar.gz
 *.gz
+.vscode/
