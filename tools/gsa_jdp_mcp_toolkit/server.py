@@ -1744,22 +1744,28 @@ def _snw_lookup_location_sysid(instance: str, token: str,
         "entry to label_entry mapping the location to a Weather Alert tag "
         "based on severity. Severity must be 1 (Critical), 2 (Urgent), or "
         "3 (Advisory) — lower-priority levels are not accepted. "
-        "The record also carries the current UTC timestamp."
+        "The record also carries the current UTC timestamp. "
+        "Provide a brief advisory description in alert_description; it will be "
+        "combined with the site code to form the title (max 100 characters)."
     ),
 )
 def gsa_jdp_post_servicenow_record(
     prompt: str,
     site_code: str,
     severity: int,
+    alert_description: str = "",
 ) -> str:
     """Apply a Weather Alert tag to a cmn_location record via ServiceNow OAuth.
 
     Args:
         prompt: The exact text of the caller's request.  Used to confirm the
             user mentioned both 'servicenow' and 'post'.  Pass verbatim.
-        site_code: The location name in cmn_location to tag (e.g. "WA0001").
+        site_code: The location name in cmn_location to tag (e.g. "AZ7319").
         severity: Numeric severity — 1 = Critical, 2 = Urgent, 3 = Advisory.
             Values outside 1-3 are rejected.
+        alert_description: Short description of the alert to include in the
+            title field (e.g. "Severe Thunderstorm Warning"). Combined with
+            site_code and truncated to 100 characters.
 
     Returns:
         A plain-text confirmation of the tag posted, or an error message.
@@ -1792,6 +1798,10 @@ def gsa_jdp_post_servicenow_record(
     severity_label = _SNW_VALID_SEVERITIES[severity]
     tag_sys_id     = _SNW_TAG_SYSIDS[severity]
     utc_now        = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Build title: "AZ7319 — <description>" truncated to 100 chars
+    raw_title = f"{site_code} — {alert_description}" if alert_description else f"{site_code} — Weather Alert {severity} ({severity_label})"
+    title = raw_title[:100]
 
     # ------------------------------------------------------------------ #
     # 3.  Load credentials from environment                               #
@@ -1854,6 +1864,7 @@ def gsa_jdp_post_servicenow_record(
         "label":     tag_sys_id,
         "table":     "cmn_location",
         "table_key": location_sys_id,
+        "title":     title,
     }
 
     url = f"https://{instance}/api/now/table/label_entry"
@@ -1874,6 +1885,7 @@ def gsa_jdp_post_servicenow_record(
             f"  cmn_location sys_id : {location_sys_id}\n"
             f"  Severity            : {severity} ({severity_label})\n"
             f"  Tag sys_id          : {tag_sys_id}\n"
+            f"  Title               : {title}\n"
             f"  label_entry sys_id  : {entry_sys_id}\n"
             f"  UTC timestamp       : {utc_now}"
         )
