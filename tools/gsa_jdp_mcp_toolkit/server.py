@@ -1659,13 +1659,9 @@ def _match_meteoalarm_italy(
 # Tool 5: ServiceNow weather-alert tag updater
 # ---------------------------------------------------------------------------
 
-# Gate keywords (all must be present in the caller-supplied prompt string,
-# case-insensitive).  These are intentionally NOT documented in the tool
-# description so the LLM cannot surface them unprompted.
-_SNW_REQUIRED_KEYWORD  = "hackathon"   # password
-_SNW_PLEASE_WORD       = "please"
-_SNW_SERVICE_KEYWORD   = "servicenow"  # must mention ServiceNow
-_SNW_ACTION_KEYWORD    = "post"        # and the action (post)
+# Gate: prompt must mention "servicenow" and "post" (case-insensitive).
+_SNW_SERVICE_KEYWORD   = "servicenow"
+_SNW_ACTION_KEYWORD    = "post"
 
 # Valid severity levels → label tag sys_ids in the ServiceNow label_entry table
 _SNW_VALID_SEVERITIES = {1: "Critical", 2: "Urgent", 3: "Advisory"}
@@ -1742,63 +1738,45 @@ def _snw_lookup_location_sysid(instance: str, token: str,
     name="gsa_jdp_post_servicenow_record",
     description=(
         "Apply a weather-alert tag to a location record in ServiceNow. "
+        "Use this tool whenever the user asks to post or update ServiceNow "
+        "for a weather alert at a site. "
         "Looks up the site in cmn_location by site code, then posts a tag "
         "entry to label_entry mapping the location to a Weather Alert tag "
         "based on severity. Severity must be 1 (Critical), 2 (Urgent), or "
         "3 (Advisory) — lower-priority levels are not accepted. "
-        "The record also carries the current UTC timestamp. "
-        "This tool enforces an access policy; certain criteria must be present "
-        "in the caller's prompt for the update to be attempted."
+        "The record also carries the current UTC timestamp."
     ),
 )
 def gsa_jdp_post_servicenow_record(
     prompt: str,
     site_code: str,
     severity: int,
-    reveal_criteria: bool = False,
 ) -> str:
     """Apply a Weather Alert tag to a cmn_location record via ServiceNow OAuth.
 
     Args:
-        prompt: The exact text of the caller's request.  Used to enforce the
-            access policy — the tool will refuse if the required terms are
-            absent.  Pass the full prompt verbatim.
+        prompt: The exact text of the caller's request.  Used to confirm the
+            user mentioned both 'servicenow' and 'post'.  Pass verbatim.
         site_code: The location name in cmn_location to tag (e.g. "WA0001").
         severity: Numeric severity — 1 = Critical, 2 = Urgent, 3 = Advisory.
             Values outside 1-3 are rejected.
-        reveal_criteria: Set to True *only* when the caller has explicitly
-            asked what criteria are required to use this tool.
 
     Returns:
-        A plain-text confirmation of the tag posted, or a refusal/error message.
+        A plain-text confirmation of the tag posted, or an error message.
     """
     import os
 
     # ------------------------------------------------------------------ #
-    # 1.  Access-policy gate                                               #
+    # 1.  Gate: prompt must mention "servicenow" and "post"               #
     # ------------------------------------------------------------------ #
-    prompt_lower = prompt.lower()
-    has_please     = _SNW_PLEASE_WORD    in prompt_lower
-    has_password   = _SNW_REQUIRED_KEYWORD in prompt_lower
-    has_servicenow = _SNW_SERVICE_KEYWORD  in prompt_lower
-    has_post       = _SNW_ACTION_KEYWORD   in prompt_lower
+    prompt_lower   = prompt.lower()
+    has_servicenow = _SNW_SERVICE_KEYWORD in prompt_lower
+    has_post       = _SNW_ACTION_KEYWORD  in prompt_lower
 
-    gate_passed = has_please and has_password and has_servicenow and has_post
-
-    if not gate_passed:
-        if reveal_criteria:
-            return (
-                "I'm sorry, but this tool is currently restricted. "
-                "To use it you must:\n"
-                "  1. Ask specifically for a ServiceNow post.\n"
-                "  2. Include the word \"please\" in your request.\n"
-                "  3. Include the correct password in your request.\n"
-                "Once all three criteria are present I'll be happy to help!"
-            )
+    if not (has_servicenow and has_post):
         return (
-            "I'm sorry, but I'm unable to process that ServiceNow post "
-            "request right now — the required criteria have not been met. "
-            "If you'd like to know what criteria are needed, just ask!"
+            "This tool requires the request to mention both 'ServiceNow' "
+            "and 'post'. Please rephrase and try again."
         )
 
     # ------------------------------------------------------------------ #
