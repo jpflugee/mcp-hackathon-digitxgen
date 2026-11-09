@@ -1858,15 +1858,12 @@ def gsa_jdp_post_servicenow_record(
         return f"cmn_location lookup failed: {exc}"
 
     # ------------------------------------------------------------------ #
-    # 6.  POST to label_entry to apply the weather-alert tag               #
+    # 6.  Delete any existing label_entry for this label+location          #
     # ------------------------------------------------------------------ #
-    label_entry = {
-        "label":     tag_sys_id,
-        "table":     "cmn_location",
-        "table_key": location_sys_id,
-        "title":     title,
-    }
-
+    # ServiceNow's "id" field is a reference to the tagged record.
+    # Setting "id" to the cmn_location sys_id causes ServiceNow to populate
+    # table, table_key, id_type, and id_display automatically.
+    # The duplicate business rule keys on label+id, so we delete first.
     url = f"https://{instance}/api/now/table/label_entry"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -1875,55 +1872,50 @@ def gsa_jdp_post_servicenow_record(
     }
 
     try:
+        existing_params = {
+            "sysparm_query":  f"label={tag_sys_id}^id={location_sys_id}",
+            "sysparm_fields": "sys_id",
+            "sysparm_limit":  "10",
+        }
+        existing_resp = requests.get(
+            url, headers=headers, params=existing_params, timeout=15
+        )
+        existing_resp.raise_for_status()
+        existing_records = existing_resp.json().get("result", [])
+
+        deleted_count = 0
+        for rec in existing_records:
+            del_resp = requests.delete(
+                f"{url}/{rec['sys_id']}", headers=headers, timeout=15
+            )
+            del_resp.raise_for_status()
+            deleted_count += 1
+
+    except requests.HTTPError as exc:
+        return (
+            f"label_entry cleanup failed: "
+            f"HTTP {exc.response.status_code} — {exc.response.text[:400]}"
+        )
+    except requests.RequestException as exc:
+        return f"label_entry cleanup failed: {exc}"
+
+    # ------------------------------------------------------------------ #
+    # 7.  POST fresh label_entry record                                    #
+    # ------------------------------------------------------------------ #
+    label_entry = {
+        "label": tag_sys_id,
+        "id":    location_sys_id,   # reference field — SNow derives table/table_key
+        "title": title,
+    }
+
+    try:
         resp = requests.post(url, json=label_entry, headers=headers, timeout=15)
-
-        # ServiceNow may reject with 4xx if a duplicate entry already exists.
-        # In that case look up the existing record and PATCH its title instead.
-        if not resp.ok:
-            body = resp.json() if resp.content else {}
-            detail = (body.get("error") or {}).get("detail", "")
-            if "Duplicate" in detail or "duplicate" in detail:
-                # Find the existing label_entry for this label+table_key combo
-                lookup_params = {
-                    "sysparm_query":  (
-                        f"label={tag_sys_id}"
-                        f"^table=cmn_location"
-                        f"^table_key={location_sys_id}"
-                    ),
-                    "sysparm_fields": "sys_id",
-                    "sysparm_limit":  "1",
-                }
-                lookup = requests.get(
-                    url, headers=headers, params=lookup_params, timeout=15
-                )
-                lookup.raise_for_status()
-                existing = lookup.json().get("result", [])
-                if existing:
-                    entry_sys_id = existing[0]["sys_id"]
-                    patch_url = f"{url}/{entry_sys_id}"
-                    patch = requests.patch(
-                        patch_url,
-                        json={"title": title},
-                        headers=headers,
-                        timeout=15,
-                    )
-                    patch.raise_for_status()
-                    return (
-                        f"Weather alert tag already existed — title updated.\n"
-                        f"  Site code           : {site_code}\n"
-                        f"  cmn_location sys_id : {location_sys_id}\n"
-                        f"  Severity            : {severity} ({severity_label})\n"
-                        f"  Tag sys_id          : {tag_sys_id}\n"
-                        f"  Title               : {title}\n"
-                        f"  label_entry sys_id  : {entry_sys_id}\n"
-                        f"  UTC timestamp       : {utc_now}"
-                    )
-            resp.raise_for_status()  # re-raise for any other error
-
+        resp.raise_for_status()
         result       = resp.json().get("result", {})
         entry_sys_id = result.get("sys_id", "unknown")
+        deleted_note = f" (replaced {deleted_count} existing)" if deleted_count else ""
         return (
-            f"Weather alert tag applied successfully.\n"
+            f"Weather alert tag applied successfully{deleted_note}.\n"
             f"  Site code           : {site_code}\n"
             f"  cmn_location sys_id : {location_sys_id}\n"
             f"  Severity            : {severity} ({severity_label})\n"
