@@ -91,7 +91,7 @@ if orchestrate toolkits list 2>/dev/null | grep -q "${TOOLKIT_NAME}"; then
   orchestrate toolkits remove --name "${TOOLKIT_NAME}" || true
 fi
 
-orchestrate toolkits import -f "${TOOLKIT_YAML}"
+orchestrate toolkits import -f "${TOOLKIT_YAML}" --app-id gsa-jdp-servicenow
 
 # --- Clean up generated artifacts --------------------------------------------
 rm -rf "${STAGE_DIR}" "${TOOLKIT_YAML}"
