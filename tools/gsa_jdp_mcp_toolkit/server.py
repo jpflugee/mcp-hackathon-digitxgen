@@ -1861,10 +1861,10 @@ def gsa_jdp_post_servicenow_record(
     # 6.  POST to label_entry to apply the weather-alert tag               #
     # ------------------------------------------------------------------ #
     label_entry = {
-        "label":    tag_sys_id,
-        "id_table": "cmn_location",
-        "id":       location_sys_id,
-        "title":    title,
+        "label":     tag_sys_id,
+        "table":     "cmn_location",
+        "table_key": location_sys_id,
+        "title":     title,
     }
 
     url = f"https://{instance}/api/now/table/label_entry"
@@ -1876,9 +1876,52 @@ def gsa_jdp_post_servicenow_record(
 
     try:
         resp = requests.post(url, json=label_entry, headers=headers, timeout=15)
-        resp.raise_for_status()
-        result        = resp.json().get("result", {})
-        entry_sys_id  = result.get("sys_id", "unknown")
+
+        # ServiceNow may reject with 4xx if a duplicate entry already exists.
+        # In that case look up the existing record and PATCH its title instead.
+        if not resp.ok:
+            body = resp.json() if resp.content else {}
+            detail = (body.get("error") or {}).get("detail", "")
+            if "Duplicate" in detail or "duplicate" in detail:
+                # Find the existing label_entry for this label+table_key combo
+                lookup_params = {
+                    "sysparm_query":  (
+                        f"label={tag_sys_id}"
+                        f"^table=cmn_location"
+                        f"^table_key={location_sys_id}"
+                    ),
+                    "sysparm_fields": "sys_id",
+                    "sysparm_limit":  "1",
+                }
+                lookup = requests.get(
+                    url, headers=headers, params=lookup_params, timeout=15
+                )
+                lookup.raise_for_status()
+                existing = lookup.json().get("result", [])
+                if existing:
+                    entry_sys_id = existing[0]["sys_id"]
+                    patch_url = f"{url}/{entry_sys_id}"
+                    patch = requests.patch(
+                        patch_url,
+                        json={"title": title},
+                        headers=headers,
+                        timeout=15,
+                    )
+                    patch.raise_for_status()
+                    return (
+                        f"Weather alert tag already existed — title updated.\n"
+                        f"  Site code           : {site_code}\n"
+                        f"  cmn_location sys_id : {location_sys_id}\n"
+                        f"  Severity            : {severity} ({severity_label})\n"
+                        f"  Tag sys_id          : {tag_sys_id}\n"
+                        f"  Title               : {title}\n"
+                        f"  label_entry sys_id  : {entry_sys_id}\n"
+                        f"  UTC timestamp       : {utc_now}"
+                    )
+            resp.raise_for_status()  # re-raise for any other error
+
+        result       = resp.json().get("result", {})
+        entry_sys_id = result.get("sys_id", "unknown")
         return (
             f"Weather alert tag applied successfully.\n"
             f"  Site code           : {site_code}\n"
