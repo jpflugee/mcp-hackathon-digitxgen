@@ -4,7 +4,8 @@ name: gsa-jdp-toolkit
 description: >
   GSA AutoNOC Polaris Project toolkit — GSA IOLP location queries,
   multi-source weather/hazard alerts (NWS, USGS, NOAA SWPC, JMA Japan,
-  DWD Germany, MeteoAlarm Italy), current weather via Open-Meteo.
+  DWD Germany, MeteoAlarm Italy), current weather via Open-Meteo,
+  and ServiceNow record posting with UTC timestamp and severity validation.
 # Orchestrate runs `python server.py` from package_root over stdio.
 # Import from this directory so package_root: . resolves correctly:
 #
