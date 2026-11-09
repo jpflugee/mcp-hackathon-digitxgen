@@ -1861,10 +1861,10 @@ def gsa_jdp_post_servicenow_record(
     # 6.  POST to label_entry to apply the weather-alert tag               #
     # ------------------------------------------------------------------ #
     label_entry = {
-        "label":     tag_sys_id,
-        "table":     "cmn_location",
-        "table_key": location_sys_id,
-        "title":     title,
+        "label":    tag_sys_id,
+        "id_table": "cmn_location",
+        "id":       location_sys_id,
+        "title":    title,
     }
 
     url = f"https://{instance}/api/now/table/label_entry"
