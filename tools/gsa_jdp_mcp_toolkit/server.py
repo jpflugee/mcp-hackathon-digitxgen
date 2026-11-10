@@ -1857,13 +1857,10 @@ def gsa_jdp_post_servicenow_record(
     except requests.RequestException as exc:
         return f"cmn_location lookup failed: {exc}"
 
-    # ------------------------------------------------------------------ #
-    # 6.  Delete any existing label_entry for this label+location          #
-    # ------------------------------------------------------------------ #
-    # ServiceNow's "id" field is a reference to the tagged record.
-    # Setting "id" to the cmn_location sys_id causes ServiceNow to populate
-    # table, table_key, id_type, and id_display automatically.
-    # The duplicate business rule keys on label+id, so we delete first.
+    # 'url' is reliably populated on all label_entry records and is unique
+    # per label+location — use it to scope the delete precisely.
+    location_url = f"cmn_location.do?sys_id={location_sys_id}&sysparm_view="
+
     url = f"https://{instance}/api/now/table/label_entry"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -1871,9 +1868,12 @@ def gsa_jdp_post_servicenow_record(
         "Accept":        "application/json",
     }
 
+    # ------------------------------------------------------------------ #
+    # 6.  Delete any existing label_entry for this label+location only     #
+    # ------------------------------------------------------------------ #
     try:
         existing_params = {
-            "sysparm_query":  f"label={tag_sys_id}^id={location_sys_id}",
+            "sysparm_query":  f"label={tag_sys_id}^url={location_url}",
             "sysparm_fields": "sys_id",
             "sysparm_limit":  "10",
         }
@@ -1903,9 +1903,11 @@ def gsa_jdp_post_servicenow_record(
     # 7.  POST fresh label_entry record                                    #
     # ------------------------------------------------------------------ #
     label_entry = {
-        "label": tag_sys_id,
-        "id":    location_sys_id,   # reference field — SNow derives table/table_key
-        "title": title,
+        "label":     tag_sys_id,
+        "table":     "cmn_location",
+        "table_key": location_sys_id,
+        "url":       location_url,
+        "title":     title,
     }
 
     try:
