@@ -1,0 +1,14 @@
+spec_version: v1
+kind: mcp
+name: gsa-combined-toolkit
+description: >
+  GSA Combined Toolkit — all GSA tools in one stdio MCP server.
+  Includes James's gsa_jdp_* tools (IOLP locations, weather alerts,
+  current weather, location detail) and MAR gsa_mar_* tools
+  (historical + NWS forecast text tables and seaborn PNG charts).
+  No API key required. Import from tools/gsa_jdp_mcp_toolkit/:
+    orchestrate toolkits import -f toolkit_combined.yaml
+command: python server_combined.py
+package_root: .
+tools:
+  - "*"
