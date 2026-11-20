@@ -1,126 +1,135 @@
-# GSA JDP MCP Toolkit — Phoenix Evaluation Harness
+# Phoenix Eval Harness — GSA MCP toolkit
 
-Tests whether the `gsa-jdp-toolkit` MCP server's tools (schemas, docstrings, return shapes) let an LLM agent answer realistic GSA property and hazard questions correctly — without any knowledge outside what the tools provide.
+Measures how well an LLM agent, given ONLY one GSA MCP server's tools, can
+answer realistic questions — i.e. whether the tool names, schemas, docstrings
+and return shapes are good enough to use without any outside knowledge. Built
+per the `mcp-eval` skill (`.agents/skills/mcp-eval/`).
 
-## Layout
+One harness, two servers under test (a **target**):
 
-```
-eval/phoenix/
-├── agent.py                          # GSAJDPAgent — launches server.py over stdio
-├── create_dataset.py                 # CLI: upload a CSV dataset to Phoenix
-├── run_experiment.py                 # CLI: run agent + judges against a dataset
-├── datasets.yaml                     # Dataset registry
-├── judges/
-│   ├── __init__.py
-│   ├── correctness_judge.py          # match_expected_response (vs. ground truth)
-│   └── relevance_judge.py            # check_answer_scope (in-scope / out-of-scope)
-├── prompts/
-│   ├── system_prompt_v1.txt          # Basic GSA analyst
-│   └── system_prompt_v2.txt          # + explicit scope boundaries
-└── datasets/
-    └── gsa-eval-0/
-        └── examples/gsa-eval-0.csv   # 10 gold questions
-```
+| Target | Server | Covers | Datasets |
+|---|---|---|---|
+| `jdp` | `tools/gsa_jdp_mcp_toolkit/server.py` | IOLP locations, current weather, hazard alerts, ServiceNow | `gsa-eval-0`, `gsa-weather-eval-0` |
+| `weather-forecast` | `tools/gsa_jdp_mcp_toolkit/server_weather_forecast.py` | historical + NWS forecast weather tables/charts | `gsa-weather-forecast-eval-0` |
 
-## Prerequisites
+Each dataset in `datasets.yaml` names its `target`, so
+`run_experiment.py --dataset-name X` picks the right server, system prompt and
+scope judge automatically (override with `--target`).
 
-### 1. Install dev dependencies
+## How it works
+
+1. `agent.py` launches the target's server over stdio (with the root venv's
+   python) and binds its tools to a LangChain agent driven by `AGENT_MODEL`
+   through the USAi gateway.
+2. `run_experiment.py` feeds it the registered dataset and scores each answer
+   with two LLM-as-judge evaluators (`JUDGE_MODEL`, keep it distinct from
+   `AGENT_MODEL`):
+   - `match_expected_response` — correct vs. ground truth (format-tolerant)
+   - `check_answer_scope` — answered in scope vs. fabricated/out-of-scope
+     (the scope definition is per target)
+3. Traces + scores land in Phoenix (http://localhost:6006).
+
+## Setup
+
+This harness is a **separate uv project** from the repo root:
+`langchain-mcp-adapters` requires `mcp<2` while the toolkit servers require
+`mcp>=2`, so they get different venvs. The agent launches the server
+subprocess with the root venv's python.
 
 ```bash
-# From repo root
+# 1. repo root — creates the venv the MCP servers run in
 uv sync --group dev
+
+# 2. eval/phoenix — creates the harness venv
+cd eval/phoenix
+uv sync
+
+cp ../../.env.example ../../.env   # then fill in USAI_API_KEY / USAI_BASE_URL
 ```
 
-### 2. Configure environment
+On a machine with corporate TLS interception, add `--native-tls` (or
+`--system-certs` on newer uv) to the `uv sync` commands.
 
-Copy `.env.example` to `.env` and fill in the Phoenix eval section:
-
-```bash
-cp .env.example .env
-```
-
-Required variables:
+Required `.env` variables:
 
 | Variable | Purpose |
 |---|---|
 | `USAI_API_KEY` | Model gateway API key |
 | `USAI_BASE_URL` | Gateway base URL (harness appends `/api/v1`) |
-| `AGENT_MODEL` | Model the agent uses (e.g. `gpt-4o`) |
+| `AGENT_MODEL` | Model the agent uses |
 | `JUDGE_MODEL` | Model the judges use — keep distinct from `AGENT_MODEL` |
 
-The MCP server itself (Open-Meteo, NWS, USGS, NOAA SWPC, JMA, DWD, MeteoAlarm) requires **no API keys** for read-only tools. ServiceNow posting requires the `SERVICENOW_*` variables if you want to test that tool end-to-end.
+Both servers' read-only tools need **no API keys** (public IOLP / Open-Meteo /
+NWS / USGS / NOAA SWPC / JMA / DWD / MeteoAlarm APIs). Testing ServiceNow
+posting end-to-end on the `jdp` target needs the `SERVICENOW_*` variables.
 
-## Running an evaluation
+## Run
 
-All commands run from `eval/phoenix/`.
-
-### Step 1 — Start Phoenix
-
-```bash
-uv run arize-phoenix serve
-# UI at http://localhost:6006  |  OTLP at :4317
-```
-
-### Step 2 — Upload the dataset (one-time)
+All commands from `eval/phoenix/`:
 
 ```bash
-cd eval/phoenix
+# 1. Start Phoenix (UI at :6006) — separate terminal, isolated env via uvx
+uvx arize-phoenix serve
 
-# Validate without uploading
+# 2. List, validate, then upload a dataset (one-time)
+uv run create_dataset.py --list
 uv run create_dataset.py --dataset-name gsa-eval-0 --dry-run
-
-# Upload
 uv run create_dataset.py --dataset-name gsa-eval-0
-```
 
-### Step 3 — Run the experiment
-
-```bash
-# Default (system prompt v1)
+# 3. Run experiments (target comes from the dataset)
 uv run run_experiment.py --dataset-name gsa-eval-0
-
-# Try scope-bounded system prompt
 uv run run_experiment.py --dataset-name gsa-eval-0 --system-prompt-version v2
+uv run run_experiment.py --dataset-name gsa-weather-forecast-eval-0
+
+# Optional: one-off smoke test of the agent against either server
+uv run agent.py --target jdp
+uv run agent.py --target weather-forecast "What is the location code of 'Whitten'?"
 ```
 
-### Step 4 — Review results
+Review failing cases in the Phoenix UI (each shows `correct`/`incorrect`,
+`within_scope`/`out_of_scope`, and the full tool-call trace) and decide whether
+the fix belongs in the tool schema/docstring, the system prompt, or the
+question itself.
 
-Open **http://localhost:6006** and navigate to the experiment. Each question shows:
-- `correct` / `incorrect` from `match_expected_response`
-- `within_scope` / `out_of_scope` from `check_answer_scope`
-- Full tool-call traces (what tools were called, with what args, what they returned)
+## Layout
 
-## Smoke testing the agent alone
-
-```bash
-cd eval/phoenix
-uv run agent.py
+```
+eval/phoenix/
+├── agent.py            # MCPToolkitAgent + TARGETS (stdio launch + LangChain agent)
+├── create_dataset.py   # CLI: validate/upload CSV datasets to Phoenix
+├── run_experiment.py   # CLI: agent + judges against a Phoenix dataset
+├── datasets.yaml       # dataset registry (each entry names its target)
+├── judges/             # correctness judge + per-target scope judge
+├── prompts/
+│   ├── jdp/                # system_prompt_v1 (basic), v2 (+ scope boundaries)
+│   └── weather-forecast/   # system_prompt_v1 (basic), v2 (+ scope boundaries)
+└── datasets/<name>/        # examples/<name>.csv (+ evaluation.xml source where present)
 ```
 
-Runs one question against the live MCP server and prints the answer — no Phoenix required.
+## Datasets
 
-## Dataset questions
+- **`gsa-eval-0`** (`jdp`) — 10 gold questions: location counts/addresses/region
+  lookups, current weather, hazard alerts, and ServiceNow severity validation.
+  Gold answers describe what a correct answer must contain, since live data
+  changes.
+- **`gsa-weather-eval-0`** (`jdp`) — 10 questions on current weather, hazard
+  alerts, and weather-related ServiceNow actions at GSA sites.
+- **`gsa-weather-forecast-eval-0`** (`weather-forecast`) — source
+  `evaluation.xml` (10 gold Q/A) plus the generated CSV (`query,responses`),
+  which adds 2 out-of-scope probes for the scope judge. Because live weather
+  changes daily, gold answers anchor to stable facts: IOLP building metadata
+  surfaced through the tools, server clamping/validation behavior,
+  unit-conversion invariants, and climatologically certain comparisons
+  (Anchorage vs. Miami). Building facts verified against the live IOLP ArcGIS
+  dataset on 2026-11-19.
 
-`gsa-eval-0` covers:
+### Adding questions or a new server
 
-| # | Topic | Tools exercised |
-|---|---|---|
-| 1 | Count GSA-owned buildings in Texas | `gsa_jdp_get_gsa_locations` |
-| 2 | Street address of DC0001 | `gsa_jdp_get_gsa_location_detail` |
-| 3 | Current temperature at NY0276 | `get_gsa_location_detail` → `gsa_jdp_current_weather` |
-| 4 | Region of IL0001 | `gsa_jdp_get_gsa_location_detail` |
-| 5 | Active NWS alerts in Florida | `gsa_jdp_get_gsa_weather_alerts` |
-| 6 | What hazard sources does the alerts tool check? | Tool schema / description knowledge |
-| 7 | Count leased properties in Region 11 | `gsa_jdp_get_gsa_locations` |
-| 8 | Current wind speed at TX0001 | `get_gsa_location_detail` → `gsa_jdp_current_weather` |
-| 9 | Year built for CA0001 | `gsa_jdp_get_gsa_location_detail` |
-| 10 | Reject severity 5 ServiceNow post | `gsa_jdp_post_servicenow_record` (rejection path) |
-
-## Adding more questions
-
-1. Add rows to `datasets/gsa-eval-0/examples/gsa-eval-0.csv`.
-2. Re-upload: `uv run create_dataset.py --dataset-name gsa-eval-0`.
-3. Or create a new dataset: add an entry to `datasets.yaml` and upload it.
+1. Add rows to a dataset's CSV, then re-upload with `create_dataset.py`.
+2. For a new dataset, add an entry to `datasets.yaml` (with its `target`).
+3. For a new MCP server, add a `TARGETS` entry in `agent.py`, a
+   `prompts/<target>/` folder, and a scope template in
+   `judges/relevance_judge.py`.
 
 ## Interpreting failures
 

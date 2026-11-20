@@ -1,7 +1,9 @@
-# Evaluations (stub)
+# Evaluations
 
-This template does **not** include an evaluation harness — but building one is
-the single best way to know whether your MCP server actually works well.
+A Phoenix-based evaluation harness for the **gsa-mar-weather-forecast** MCP
+server now lives in [`phoenix/`](phoenix/README.md) — see that README for
+setup and usage. It was built with the **`mcp-eval` skill**
+(`.agents/skills/mcp-eval/`).
 
 ## Why evaluate?
 

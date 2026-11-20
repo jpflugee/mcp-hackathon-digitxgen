@@ -1,74 +1,74 @@
-"""Correctness judge — compares the agent's answer to a ground-truth reference.
+"""Correctness judge — compares the agent's answer to the gold answer."""
 
-Returns "correct" if the agent's answer matches the expected response within
-reasonable formatting and phrasing tolerance, "incorrect" otherwise.
-"""
-import os
+from __future__ import annotations
 
 from dotenv import load_dotenv
-from phoenix.evals import ClassificationEvaluator, LLM
 
 load_dotenv()
 
-_TEMPLATE = """You are evaluating an AI assistant that answers questions about
-GSA (General Services Administration) federal property locations, weather
-conditions, hazard alerts, and ServiceNow record management.
+TEMPLATE = """You are grading the answer of an AI agent that uses GSA MCP tools to
+answer questions about GSA federal buildings (via the GSA IOLP building
+dataset), their current, historical, and forecasted weather (Open-Meteo, NWS),
+active hazard alerts, and ServiceNow weather-alert records.
 
-Compare the assistant's answer to the reference answer below. The assistant's
-answer is CORRECT if it conveys the same factual information as the reference,
-even if the wording, units, or formatting differ (e.g. "1,234" vs "1234",
-"°C" vs "degrees Celsius", extra surrounding context). It is INCORRECT if it
-contradicts the reference, omits a key fact, or fabricates information not
-present in the reference.
+Compare the agent's answer to the reference (gold) answer. The reference is
+either the exact expected value or a description of what a correct answer must
+contain (e.g. which tool to call and what the answer must state). Live data
+changes, so when the reference describes a field the answer must report (a
+temperature, a count, an address), any specific value consistent with that
+description counts — you cannot verify live numbers, only that the agent
+reported the requested kind of value rather than guessing or refusing.
 
-User question:
-{input}
+Mark the answer "correct" if it contains the same essential fact(s) as the
+reference, even when:
+- units differ but are equivalent (e.g. 20°C vs 68°F), or extra units/symbols
+  are added;
+- formatting, capitalization, or punctuation differs (e.g. "DC0003" vs
+  "dc0003", "Washington" vs "Washington, DC", "1,234" vs "1234");
+- the agent adds surrounding prose, context, caveats, or explanation around
+  the correct value;
+- numbers are written differently but equal (e.g. "7" vs "seven").
 
-Reference answer (ground truth):
-{reference}
+Mark it "incorrect" only when the essential fact is wrong, missing, or
+contradicts the reference. If the reference says the agent should refuse or
+state the request is out of scope, the answer is "correct" when the agent
+declines or redirects, and "incorrect" when it fabricates an answer anyway.
 
-Assistant's answer:
-{output}
+[BEGIN DATA]
+Question: {input}
+Reference answer: {reference}
+Agent answer: {output}
+[END DATA]
 
-Respond with exactly one word — either "correct" or "incorrect" — with no
-other text.
+Respond with exactly one label: "correct" or "incorrect".
 """
 
-_CHOICES = {"correct": 1, "incorrect": 0}
 
+def match_expected_response(input, output, expected):
+    """Phoenix experiment evaluator: agent answer vs. ground truth."""
+    from phoenix.evals import ClassificationEvaluator
 
-def match_expected_response(input: dict, output: dict, expected: dict) -> str:
-    """Score an agent response against a ground-truth reference.
-
-    Args:
-        input:    Phoenix input dict — must contain key "query".
-        output:   Phoenix output dict — must contain key "response".
-        expected: Phoenix expected dict — must contain key "responses".
-
-    Returns:
-        "correct" or "incorrect"
-    """
-    judge_model = os.getenv("JUDGE_MODEL", "claude_4_6_sonnet")
-    api_key = os.getenv("USAI_API_KEY", "")
-    base_url = os.getenv("USAI_BASE_URL", "")
-
-    llm = LLM(
-        provider="openai",
-        model=judge_model,
-        api_key=api_key,
-        base_url=base_url.rstrip('/') if base_url else None,
-    )
+    from ._llm import get_judge_llm
 
     evaluator = ClassificationEvaluator(
-        name="correctness",
-        llm=llm,
-        prompt_template=_TEMPLATE,
-        choices=list(_CHOICES.keys()),
+        name="match_expected_response",
+        llm=get_judge_llm(),
+        prompt_template=TEMPLATE,
+        choices={"correct": 1, "incorrect": 0},
     )
+    result = evaluator.evaluate(
+        {
+            "input": _text(input, "query"),
+            "output": _text(output),
+            "reference": _text(expected, "responses"),
+        }
+    )
+    return result[0]
 
-    scores = evaluator.evaluate({
-        "input": input.get("query", ""),
-        "output": output.get("response", ""),
-        "reference": expected.get("responses", ""),
-    })
-    return scores[0].label if scores else "incorrect"
+
+def _text(value, key: str | None = None) -> str:
+    if isinstance(value, dict):
+        if key and key in value:
+            return str(value[key])
+        return str(next(iter(value.values()), ""))
+    return str(value)

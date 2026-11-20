@@ -1,0 +1,51 @@
+<evaluation>
+   <!--
+     Gold questions for the gsa-mar-weather-forecast MCP server.
+     Design notes: live weather values change daily, so every answer below is
+     anchored to facts that are stable over time — IOLP building metadata
+     surfaced through the weather tools, server clamping/validation behavior,
+     unit-conversion invariants, and climatologically certain comparisons
+     (Anchorage vs. Miami). Building facts were verified against the live GSA
+     IOLP ArcGIS dataset on 2026-11-19.
+   -->
+   <qa_pair>
+      <question>A search for the GSA building matching the partial name 'Whitten' returns one federal building. What is its GSA location code? Answer with the code only.</question>
+      <answer>DC0003</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Retrieve weather data for the GSA building with location code DC0003. According to the building header in the output, what city is it in? Answer with the city name only.</question>
+      <answer>Washington</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Over the past 14 days, which GSA building recorded the higher average daily temperature: the one matched by 'Anchorage Historic' or the one matched by 'Claude Pepper'? Answer with the city name of the warmer building.</question>
+      <answer>Miami</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Fetch yesterday's maximum temperature at the James L. Whitten Federal Building twice — once in Celsius and once in Fahrenheit. Is the Fahrenheit value equal to (9/5 x Celsius + 32) to within 0.3 degrees? Answer True or False.</question>
+      <answer>True</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Request weather data for any GSA building using the weather parameter 'snowfall'. The server rejects it and lists every parameter it supports. How many weather parameters does the server support? Answer with a number only.</question>
+      <answer>4</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Request the text weather table for the Whitten building with forecast_days set to 30. Counting the dated rows in the FORECAST section, how many forecast days did the server actually return? Answer with a number only.</question>
+      <answer>7</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Request the text weather table for the Whitten building with history_days set to 100. Counting the dated rows in the HISTORICAL section, how many days of history did the server actually return? Answer with a number only.</question>
+      <answer>14</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Generate a single weather chart covering both the building matched by 'Whitten' and the building matched by 'Claude Pepper'. How many buildings does the plot tool report it plotted? Answer with a number only.</question>
+      <answer>2</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Request weather data for a building named 'ZZZNOSUCHBUILDING'. Does the server indicate that no GSA building was found for that name? Answer True or False.</question>
+      <answer>True</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Retrieve humidity data for the Claude Pepper Federal Building. According to the table header, what unit does the server report humidity in? Answer with the unit symbol only.</question>
+      <answer>%</answer>
+   </qa_pair>
+</evaluation>
