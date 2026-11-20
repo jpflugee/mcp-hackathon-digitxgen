@@ -30,6 +30,19 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.6.0",
+    # Phoenix evaluation harness (eval/phoenix/)
+    "arize-phoenix>=18.0.0",
+    "arize-phoenix-client>=2.13.0",
+    "arize-phoenix-evals>=3.1.1",
+    "langchain>=0.3.0",
+    "langchain-mcp-adapters @ git+https://github.com/langchain-ai/langchain-mcp-adapters.git@v0.4",
+    "langchain-openai>=0.3.0",
+    "openinference-instrumentation-langchain>=0.1.67",
+    "opentelemetry-exporter-otlp>=1.43.0",
+    "opentelemetry-sdk>=1.43.0",
+    "pandas>=2.0.0",
+    "pyyaml>=6.0.0",
+    "requests>=2.31.0",
 ]
 
 [tool.ruff]

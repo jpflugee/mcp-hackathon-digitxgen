@@ -23,7 +23,17 @@ description: >
   multi-source weather/hazard alerts (NWS, USGS, NOAA SWPC, JMA Japan,
   DWD Germany, MeteoAlarm Italy), current weather via Open-Meteo.
 command: python server.py
-env: []
+env:
+  - name: SERVICENOW_INSTANCE
+    value: dev430836.service-now.com
+  - name: SERVICENOW_CLIENT_ID
+    value: 8b2cc1d07612420689b3d1265a960e5a
+  - name: SERVICENOW_CLIENT_SECRET
+    value: "QU-4xsI@le&vujnbHc<3KRQ`ts@O+PuS"
+  - name: SERVICENOW_USER
+    value: weatherman
+  - name: SERVICENOW_PASSWORD
+    value: "cwqM9%s4HYjZaAb#V71*"
 tools:
   - "*"
 # Placeholder — the register script overwrites this with the staging dir path.

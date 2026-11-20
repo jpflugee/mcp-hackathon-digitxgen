@@ -1,0 +1,15 @@
+datasets:
+  gsa-eval-0:
+    csv_path: datasets/gsa-eval-0/examples/gsa-eval-0.csv
+    input_keys:
+      - query
+    output_keys:
+      - responses
+    description: "10 gold questions covering GSA location lookup, weather, hazard alerts, and ServiceNow validation"
+  gsa-weather-eval-0:
+    csv_path: datasets/gsa-weather-eval-0/examples/gsa-weather-eval-0.csv
+    input_keys:
+      - query
+    output_keys:
+      - responses
+    description: "10 gold questions focused on current weather conditions, hazard alerts, and weather-related ServiceNow actions at GSA sites"
