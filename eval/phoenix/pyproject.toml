@@ -1,0 +1,31 @@
+[project]
+name = "gsa-weather-eval"
+version = "0.1.0"
+description = "Phoenix eval harness for the gsa-mar-weather-forecast MCP server"
+requires-python = ">=3.11"
+# NOTE: this is deliberately a SEPARATE uv project from the repo root.
+# langchain-mcp-adapters requires mcp<2, while the toolkit servers under test
+# require mcp>=2 — so the harness and the server live in different venvs.
+# agent.py launches the server subprocess with the ROOT venv's python.
+#
+# The full `arize-phoenix` package is NOT a dependency here: it also drags in
+# mcp>=2 (via fastmcp-slim). Run the Phoenix server isolated instead:
+#   uvx arize-phoenix serve        (or: uv tool run arize-phoenix serve)
+# The harness only needs the lightweight otel/client/evals packages below.
+dependencies = [
+    "arize-phoenix-client>=2.13.0",
+    "arize-phoenix-evals>=3.1.1",
+    "arize-phoenix-otel>=0.10.0",
+    "langchain>=1.0.0",
+    "langchain-mcp-adapters>=0.3.2",
+    "langchain-openai>=1.0.0",
+    "openinference-instrumentation-langchain>=0.1.67",
+    "opentelemetry-exporter-otlp>=1.30.0",
+    "opentelemetry-sdk>=1.30.0",
+    "pandas>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.0",
+]
+
+[tool.uv]
+package = false

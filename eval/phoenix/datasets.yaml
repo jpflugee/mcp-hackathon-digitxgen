@@ -1,0 +1,10 @@
+# Dataset registry for the Phoenix eval harness.
+# Paths are relative to eval/phoenix/.
+datasets:
+  gsa-weather-eval-0:
+    csv_path: datasets/gsa-weather-eval-0/examples/gsa-weather-eval-0.csv
+    input_keys:
+      - query
+    output_keys:
+      - responses
+    description: "12 questions for the gsa-mar-weather-forecast server: 10 gold Q/A (stable IOLP metadata, clamping/validation behavior, unit invariants, climate comparisons) + 2 out-of-scope probes."

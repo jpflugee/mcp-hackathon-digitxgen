@@ -25,13 +25,20 @@ build-backend = "hatchling.build"
 packages = ["src/example_server"]
 
 [dependency-groups]
-# Dev + eval-only deps. Install with `uv sync --group dev`.
-# The Phoenix evaluation harness (see eval/) is not scaffolded in this template
-# on purpose — add these when you build it per the mcp-eval skill.
+# Dev deps. Install with `uv sync --group dev`.
+# `requests` is here so the tools/gsa_jdp_mcp_toolkit stdio servers can run in
+# this venv (the eval harness launches them with this venv's python).
+# The Phoenix eval harness itself is a SEPARATE uv project (eval/phoenix/) —
+# its langchain-mcp-adapters needs mcp<2 while the toolkit needs mcp>=2.
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.6.0",
+    "requests>=2.31.0",
+    # Makes requests/pip trust the OS certificate store — required on machines
+    # behind corporate TLS interception (otherwise the toolkit servers' HTTPS
+    # calls fail certificate verification); harmless elsewhere.
+    "pip-system-certs>=4.0",
 ]
 
 [tool.ruff]
