@@ -2,16 +2,20 @@
 
 Launches the selected server over stdio, instruments everything with
 Phoenix/OpenInference, and exposes a synchronous task factory for Phoenix
-experiments. Two targets are supported (see ``TARGETS``):
+experiments. Three targets are supported (see ``TARGETS``):
 
     jdp               tools/gsa_jdp_mcp_toolkit/server.py
                       (locations, current weather, hazard alerts, ServiceNow)
     weather-forecast  tools/gsa_jdp_mcp_toolkit/server_weather_forecast.py
                       (historical + NWS forecast weather tables / charts)
+    combined          tools/gsa_jdp_mcp_toolkit/server_combined.py
+                      (all 9 tools: JDP locations/weather/alerts/ServiceNow +
+                       MAR forecast tables/charts/trend + MAR comms-outage scan/building)
 
 Standalone smoke test:
     uv run agent.py --target jdp
     uv run agent.py --target weather-forecast "What is the location code of 'Whitten'?"
+    uv run agent.py --target combined "How many GSA-owned buildings over 50k RSF are in Texas?"
 """
 
 from __future__ import annotations
@@ -61,8 +65,17 @@ TARGETS: dict[str, Target] = {
             "the partial name 'Whitten'?"
         ),
     ),
+    "combined": Target(
+        server_script="server_combined.py",
+        server_key="gsa_combined_server",
+        project_name="gsa-combined-toolkit-eval",
+        prompts_subdir="combined",
+        smoke_question=(
+            "How many GSA-owned buildings over 50,000 RSF are in Texas?"
+        ),
+    ),
 }
-DEFAULT_TARGET = "weather-forecast"
+DEFAULT_TARGET = "combined"
 DEFAULT_PHOENIX_ENDPOINT = os.getenv("PHOENIX_HOST", "http://localhost:6006")
 
 

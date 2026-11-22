@@ -2378,6 +2378,235 @@ def gsa_mar_comms_outage_building(
 
 
 # ===========================================================================
+# SERVICENOW TOOL — gsa_jdp_post_servicenow_record
+# (ported from server.py; no credentials required for the prompt/severity gates)
+# ===========================================================================
+
+_SNW_SERVICE_KEYWORD  = "servicenow"
+_SNW_ACTION_KEYWORD   = "post"
+_SNW_VALID_SEVERITIES = {1: "Critical", 2: "Urgent", 3: "Advisory"}
+_SNW_TAG_SYSIDS = {
+    1: "1f571ac8732813101e51f26e4ab8b7c7",   # Weather Alert 1 — Critical
+    2: "38671ac8732813101e51f26e4ab8b7f4",   # Weather Alert 2 — Urgent
+    3: "9e679ac8732813101e51f26e4ab8b7ed",   # Weather Alert 3 — Advisory
+}
+_SNW_INSTANCE_ENV      = "SERVICENOW_INSTANCE"
+_SNW_CLIENT_ID_ENV     = "SERVICENOW_CLIENT_ID"
+_SNW_CLIENT_SECRET_ENV = "SERVICENOW_CLIENT_SECRET"
+_SNW_USER_ENV          = "SERVICENOW_USER"
+_SNW_PASSWORD_ENV      = "SERVICENOW_PASSWORD"
+
+
+def _snw_get_oauth_token(instance: str, client_id: str, client_secret: str,
+                          username: str, password: str) -> str:
+    url = f"https://{instance}/oauth_token.do"
+    resp = requests.post(
+        url,
+        data={
+            "grant_type":    "password",
+            "client_id":     client_id,
+            "client_secret": client_secret,
+            "username":      username,
+            "password":      password,
+        },
+        headers={"Accept": "application/json"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
+def _snw_lookup_location_sysid(instance: str, token: str, site_code: str) -> str:
+    url = f"https://{instance}/api/now/table/cmn_location"
+    params = {
+        "sysparm_query":  f"name={site_code}",
+        "sysparm_fields": "sys_id,name",
+        "sysparm_limit":  "1",
+    }
+    resp = requests.get(
+        url,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        params=params,
+        timeout=15,
+    )
+    resp.raise_for_status()
+    results = resp.json().get("result", [])
+    if not results:
+        raise ValueError(f"No cmn_location record found with name '{site_code}'.")
+    return results[0]["sys_id"]
+
+
+@mcp.tool(
+    name="gsa_jdp_post_servicenow_record",
+    description=(
+        "Apply a weather-alert tag to a location record in ServiceNow. "
+        "Use this tool whenever the user asks to post or update ServiceNow "
+        "for a weather alert at a site. "
+        "Looks up the site in cmn_location by site code, then posts a tag "
+        "entry to label_entry mapping the location to a Weather Alert tag "
+        "based on severity. Severity must be 1 (Critical), 2 (Urgent), or "
+        "3 (Advisory) — lower-priority levels are not accepted. "
+        "The record also carries the current UTC timestamp. "
+        "Provide a brief advisory description in alert_description; it will be "
+        "combined with the site code to form the title (max 100 characters)."
+    ),
+)
+def gsa_jdp_post_servicenow_record(
+    prompt: str,
+    site_code: str,
+    severity: int,
+    alert_description: str = "",
+) -> str:
+    """Apply a Weather Alert tag to a cmn_location record via ServiceNow OAuth.
+
+    Args:
+        prompt: The exact text of the caller's request. Used to confirm the
+            user mentioned both 'servicenow' and 'post'. Pass verbatim.
+        site_code: The location name in cmn_location to tag (e.g. "AZ7319").
+        severity: Numeric severity — 1 = Critical, 2 = Urgent, 3 = Advisory.
+            Values outside 1-3 are rejected.
+        alert_description: Short description of the alert to include in the
+            title field (e.g. "Severe Thunderstorm Warning"). Combined with
+            site_code and truncated to 100 characters.
+
+    Returns:
+        A plain-text confirmation of the tag posted, or an error message.
+    """
+    import os as _os
+
+    # 1. Gate: prompt must mention "servicenow" and "post"
+    prompt_lower = prompt.lower()
+    if _SNW_SERVICE_KEYWORD not in prompt_lower or _SNW_ACTION_KEYWORD not in prompt_lower:
+        return (
+            "This tool requires the request to mention both 'ServiceNow' "
+            "and 'post'. Please rephrase and try again."
+        )
+
+    # 2. Severity validation
+    if severity not in _SNW_VALID_SEVERITIES:
+        return (
+            f"Severity {severity} is not valid for ServiceNow posting. "
+            "Only levels 1 (Critical), 2 (Urgent), and 3 (Advisory) are "
+            "accepted. Lower-priority levels are not posted."
+        )
+
+    severity_label = _SNW_VALID_SEVERITIES[severity]
+    tag_sys_id     = _SNW_TAG_SYSIDS[severity]
+    utc_now        = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    raw_title = (
+        f"{site_code} — {alert_description}"
+        if alert_description
+        else f"{site_code} — Weather Alert {severity} ({severity_label})"
+    )
+    title = raw_title[:100]
+
+    # 3. Load credentials
+    instance      = _os.environ.get(_SNW_INSTANCE_ENV,      "").strip()
+    client_id     = _os.environ.get(_SNW_CLIENT_ID_ENV,     "").strip()
+    client_secret = _os.environ.get(_SNW_CLIENT_SECRET_ENV, "").strip()
+    username      = _os.environ.get(_SNW_USER_ENV,          "").strip()
+    password      = _os.environ.get(_SNW_PASSWORD_ENV,      "").strip()
+
+    missing = [
+        name for name, val in [
+            (_SNW_INSTANCE_ENV,      instance),
+            (_SNW_CLIENT_ID_ENV,     client_id),
+            (_SNW_CLIENT_SECRET_ENV, client_secret),
+            (_SNW_USER_ENV,          username),
+            (_SNW_PASSWORD_ENV,      password),
+        ] if not val
+    ]
+    if missing:
+        return (
+            "ServiceNow credentials are not fully configured on this server. "
+            f"Missing environment variable(s): {', '.join(missing)}."
+        )
+
+    # 4. OAuth token
+    try:
+        token = _snw_get_oauth_token(instance, client_id, client_secret, username, password)
+    except requests.HTTPError as exc:
+        return f"OAuth token request failed: HTTP {exc.response.status_code} — {exc.response.text[:400]}"
+    except requests.RequestException as exc:
+        return f"OAuth token request failed: {exc}"
+
+    # 5. Look up cmn_location
+    try:
+        location_sys_id = _snw_lookup_location_sysid(instance, token, site_code)
+    except ValueError as exc:
+        return str(exc)
+    except requests.HTTPError as exc:
+        return f"cmn_location lookup failed: HTTP {exc.response.status_code} — {exc.response.text[:400]}"
+    except requests.RequestException as exc:
+        return f"cmn_location lookup failed: {exc}"
+
+    location_url = f"cmn_location.do?sys_id={location_sys_id}&sysparm_view="
+    url = f"https://{instance}/api/now/table/label_entry"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type":  "application/json",
+        "Accept":        "application/json",
+    }
+
+    # 6. Delete existing label_entry for this label+location
+    try:
+        existing_resp = requests.get(
+            url,
+            headers=headers,
+            params={
+                "sysparm_query":  f"label={tag_sys_id}^url={location_url}",
+                "sysparm_fields": "sys_id",
+                "sysparm_limit":  "10",
+            },
+            timeout=15,
+        )
+        existing_resp.raise_for_status()
+        existing_records = existing_resp.json().get("result", [])
+        deleted_count = 0
+        for rec in existing_records:
+            del_resp = requests.delete(f"{url}/{rec['sys_id']}", headers=headers, timeout=15)
+            del_resp.raise_for_status()
+            deleted_count += 1
+    except requests.HTTPError as exc:
+        return f"label_entry cleanup failed: HTTP {exc.response.status_code} — {exc.response.text[:400]}"
+    except requests.RequestException as exc:
+        return f"label_entry cleanup failed: {exc}"
+
+    # 7. POST fresh label_entry
+    try:
+        resp = requests.post(
+            url,
+            json={
+                "label":     tag_sys_id,
+                "table":     "cmn_location",
+                "table_key": location_sys_id,
+                "url":       location_url,
+                "title":     title,
+            },
+            headers=headers,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        result_data  = resp.json().get("result", {})
+        entry_sys_id = result_data.get("sys_id", "unknown")
+        deleted_note = f" (replaced {deleted_count} existing)" if deleted_count else ""
+        return (
+            f"Weather alert tag applied successfully{deleted_note}.\n"
+            f"  Site code           : {site_code}\n"
+            f"  cmn_location sys_id : {location_sys_id}\n"
+            f"  Severity            : {severity} ({severity_label})\n"
+            f"  Tag sys_id          : {tag_sys_id}\n"
+            f"  Title               : {title}\n"
+            f"  label_entry sys_id  : {entry_sys_id}\n"
+            f"  UTC timestamp       : {utc_now}"
+        )
+    except requests.HTTPError as exc:
+        return f"label_entry POST failed: HTTP {exc.response.status_code} — {exc.response.text[:400]}"
+    except requests.RequestException as exc:
+        return f"label_entry POST failed: {exc}"
+
+
+# ===========================================================================
 # Entrypoint
 # ===========================================================================
 
