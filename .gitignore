@@ -9,3 +9,4 @@ __pycache__/
 *.gz
 .vscode/
 .env
+jdpclip.txt
