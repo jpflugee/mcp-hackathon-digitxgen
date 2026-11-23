@@ -1,4 +1,0 @@
-URL:https://api.ca-tor.watson-orchestrate.cloud.ibm.com/instances/a4f3dfb8-ff1f-4f92-ae44-a63a0dd9f791
-Old Key:UhmBp7rAho34sek7Cx7GGFQ8yCtiEDV_4bydImopgdHM
-
-New Key:jYX86nI_QUZ0DWNddexfTm35wdgPqM-1_YXlj1JA11jF
