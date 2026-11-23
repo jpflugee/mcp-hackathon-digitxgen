@@ -298,7 +298,7 @@ def _format_location(attrs: dict) -> str:
         "(BUILDING_RSF) greater than 50,000 are returned. Results can be further filtered "
         "by US state (two-letter abbreviation, e.g. 'TX'), ownership type "
         "('owned'/'leased'), and/or GSA region code (two-digit string, e.g. '05'). "
-        "Pass no filters to retrieve all qualifying locations. "
+        "Pass no filters to retrieve all qualifying locations (paginated automatically). "
         "Each result includes the location code, property name, full address, lat/lon "
         "coordinates, ownership type, region, year built, and building size in RSF. "
         "Coordinates are suitable for direct use with gsa_jdp_current_weather."
@@ -308,7 +308,7 @@ def gsa_jdp_get_gsa_locations(
     state: str = "",
     ownership: str = "",
     region: str = "",
-    max_results: int = 200,
+    max_results: int = 0,
 ) -> str:
     """List GSA property locations with BUILDING_RSF > 50,000.
 
@@ -316,7 +316,7 @@ def gsa_jdp_get_gsa_locations(
         state: Two-letter US state abbreviation (e.g. 'CA', 'TX').
         ownership: 'owned' (federal/GSA-owned) or 'leased'. Leave blank for both.
         region: Two-digit GSA region code (e.g. '01' through '11').
-        max_results: Maximum number of locations to return (default 200, max 5000).
+        max_results: Maximum number of locations to return. 0 (default) means fetch all.
 
     Returns:
         A formatted list of matching GSA locations with address and coordinate details.
@@ -334,7 +334,7 @@ def gsa_jdp_get_gsa_locations(
         clauses.append(f"REGION_CODE = '{region.strip().zfill(2)}'")
 
     where = " AND ".join(clauses)
-    limit = max(1, min(int(max_results), 5000)) if max_results else 5000
+    limit = max(1, int(max_results)) if max_results else None
     locations = _query_gsa_features(where, max_records=limit)
 
     if not locations:
@@ -352,7 +352,7 @@ def gsa_jdp_get_gsa_locations(
 
     lines = [
         f"GSA Properties ({filter_desc}) — {len(locations)} result(s)"
-        + (f" [limited to {limit}]" if len(locations) == limit else ""),
+        + (f" [limited to {limit}]" if limit and len(locations) == limit else ""),
         "=" * 70,
     ]
     for attrs in locations:
@@ -988,7 +988,7 @@ def gsa_jdp_get_gsa_weather_alerts(
     state: str = "",
     ownership: str = "",
     region: str = "",
-    max_sites: int = 500,
+    max_sites: int = 0,
     severity_filter: str = "",
 ) -> str:
     """List GSA sites under active weather/hazard alerts from NWS, USGS, NOAA SWPC, JMA, DWD, MeteoAlarm.
@@ -997,7 +997,7 @@ def gsa_jdp_get_gsa_weather_alerts(
         state: Two-letter US state abbreviation to restrict GSA sites (e.g. 'TX').
         ownership: Filter GSA sites: 'owned' or 'leased'. Leave blank for both.
         region: Two-digit GSA region code (e.g. '07'). Leave blank for all regions.
-        max_sites: Maximum number of GSA sites to check (default 500).
+        max_sites: Maximum number of GSA sites to check. 0 (default) means fetch all.
         severity_filter: Optional minimum severity: 'Extreme', 'Severe', 'Moderate', or 'Minor'.
 
     Returns:
@@ -1037,7 +1037,7 @@ def gsa_jdp_get_gsa_weather_alerts(
     if region.strip():
         clauses.append(f"REGION_CODE = '{region.strip().zfill(2)}'")
     where = " AND ".join(clauses) if clauses else "1=1"
-    limit = max(1, int(max_sites)) if max_sites else None
+    limit = max(1, int(max_sites)) if max_sites > 0 else None
 
     try:
         sites = _query_gsa_features(where, max_records=limit)
@@ -2212,7 +2212,7 @@ def gsa_mar_comms_outage_scan(
     state: str = "VA",
     min_probability: float = 50.0,
     top_n: int = 10,
-    max_sites: int = 200,
+    max_sites: int = 0,
 ) -> str:
     """Scan GSA sites in a state and rank by communications outage probability.
 
@@ -2221,14 +2221,14 @@ def gsa_mar_comms_outage_scan(
         min_probability: Only return sites at or above this % threshold (default 50.0).
                          Set to 0 to list all sites with any active alert.
         top_n: Max sites to return, sorted highest first (default 10).
-        max_sites: Max GSA sites to fetch and check (default 200).
+        max_sites: Max GSA sites to fetch and check. 0 (default) means fetch all.
 
     Returns:
         Ranked list of GSA sites above the threshold, highest probability first.
     """
     try:
         safe = state.strip().upper().replace("'", "")
-        sites = _query_gsa_features(f"STATE_CD = '{safe}'", max_records=max_sites)
+        sites = _query_gsa_features(f"STATE_CD = '{safe}'", max_records=max_sites if max_sites > 0 else None)
     except Exception as exc:
         return f"Failed to fetch GSA sites for state='{state}': {exc}"
     if not sites:

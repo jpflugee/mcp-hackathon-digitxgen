@@ -73,7 +73,8 @@ orchestrate env list
 echo "=== Staging minimal package_root at ${STAGE_DIR} ==="
 rm -rf "${STAGE_DIR}"
 mkdir -p "${STAGE_DIR}"
-cp "${GSA_TOOLKIT_DIR}/server.py" "${STAGE_DIR}/server.py"
+cp "${SCRIPT_DIR}/server.py" "${STAGE_DIR}/server.py"
+cp "${GSA_TOOLKIT_DIR}/server_combined.py" "${STAGE_DIR}/server_combined.py"
 cp "${GSA_TOOLKIT_DIR}/requirements.txt" "${STAGE_DIR}/requirements.txt"
 # Drop any caches.
 find "${STAGE_DIR}" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true

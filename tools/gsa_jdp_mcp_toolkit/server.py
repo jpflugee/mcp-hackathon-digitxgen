@@ -167,7 +167,7 @@ def gsa_jdp_get_gsa_locations(
     state: str = "",
     ownership: str = "",
     region: str = "",
-    max_results: int = 200,
+    max_results: int = 0,
 ) -> str:
     """List GSA property locations with BUILDING_RSF > 50,000, optionally filtered by state, ownership, or region.
 
@@ -178,7 +178,7 @@ def gsa_jdp_get_gsa_locations(
                    'leased'. Leave blank for both.
         region: Two-digit GSA region code to filter by (e.g. '01' through '11').
                 Leave blank to include all regions.
-        max_results: Maximum number of locations to return (default 200, max 5000).
+        max_results: Maximum number of locations to return. 0 (default) means fetch all.
                      Use a higher value or 0 to retrieve more records.
 
     Returns:
@@ -206,7 +206,7 @@ def gsa_jdp_get_gsa_locations(
         clauses.append(f"REGION_CODE = '{r}'")
 
     where = " AND ".join(clauses) if clauses else "1=1"
-    limit = max(1, min(int(max_results), 5000)) if max_results else 5000
+    limit = max(1, int(max_results)) if max_results > 0 else None
 
     locations = _query_gsa_features(where, max_records=limit)
 
@@ -749,7 +749,7 @@ def gsa_jdp_get_gsa_weather_alerts(
     state: str = "",
     ownership: str = "",
     region: str = "",
-    max_sites: int = 500,
+    max_sites: int = 0,
     severity_filter: str = "",
 ) -> str:
     """List GSA sites under active weather/hazard alerts from NWS, USGS, NOAA SWPC,
@@ -762,7 +762,7 @@ def gsa_jdp_get_gsa_weather_alerts(
                    Leave blank for both.
         region: Two-digit GSA region code to restrict sites (e.g. '07').
                 Leave blank for all regions.
-        max_sites: Maximum number of GSA sites to check (default 500).
+        max_sites: Maximum number of GSA sites to check. 0 (default) means fetch all.
                    Higher values increase run time. Use 0 for all sites (may be slow).
         severity_filter: Optional minimum severity to include in results.
                          Accepts 'Extreme', 'Severe', 'Moderate', or 'Minor'.
@@ -812,7 +812,7 @@ def gsa_jdp_get_gsa_weather_alerts(
         clauses.append(f"REGION_CODE = '{region.strip().zfill(2)}'")
 
     where = " AND ".join(clauses) if clauses else "1=1"
-    limit = max(1, int(max_sites)) if max_sites else None
+    limit = max(1, int(max_sites)) if max_sites > 0 else None
 
     try:
         sites = _query_gsa_features(where, max_records=limit)
