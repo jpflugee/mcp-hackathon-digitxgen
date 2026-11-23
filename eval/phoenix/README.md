@@ -5,12 +5,13 @@ answer realistic questions — i.e. whether the tool names, schemas, docstrings
 and return shapes are good enough to use without any outside knowledge. Built
 per the `mcp-eval` skill (`.agents/skills/mcp-eval/`).
 
-One harness, two servers under test (a **target**):
+One harness, three servers under test (a **target**):
 
-| Target | Server | Covers | Datasets |
+| Target | Server | Tools | Datasets |
 |---|---|---|---|
-| `jdp` | `tools/gsa_jdp_mcp_toolkit/server.py` | IOLP locations, current weather, hazard alerts, ServiceNow | `gsa-eval-0`, `gsa-weather-eval-0` |
-| `weather-forecast` | `tools/gsa_jdp_mcp_toolkit/server_weather_forecast.py` | historical + NWS forecast weather tables/charts | `gsa-weather-forecast-eval-0` |
+| `jdp` | `tools/gsa_jdp_mcp_toolkit/server.py` | 5 — IOLP locations, current weather, hazard alerts, ServiceNow | `gsa-eval-0`, `gsa-weather-eval-0` |
+| `weather-forecast` | `tools/gsa_jdp_mcp_toolkit/server_weather_forecast.py` | 2 — historical + NWS forecast text tables / charts | `gsa-weather-forecast-eval-0` |
+| `combined` *(default)* | `tools/gsa_jdp_mcp_toolkit/server_combined.py` | **9** — all JDP + MAR tools in one process | any dataset |
 
 Each dataset in `datasets.yaml` names its `target`, so
 `run_experiment.py --dataset-name X` picks the right server, system prompt and
@@ -44,6 +45,7 @@ uv sync --group dev
 cd eval/phoenix
 uv sync
 
+# 3. copy and fill in .env at the repo root
 cp ../../.env.example ../../.env   # then fill in USAI_API_KEY / USAI_BASE_URL
 ```
 
@@ -61,28 +63,37 @@ Required `.env` variables:
 
 Both servers' read-only tools need **no API keys** (public IOLP / Open-Meteo /
 NWS / USGS / NOAA SWPC / JMA / DWD / MeteoAlarm APIs). Testing ServiceNow
-posting end-to-end on the `jdp` target needs the `SERVICENOW_*` variables.
+posting end-to-end on the `jdp` or `combined` target needs the `SERVICENOW_*`
+variables.
 
 ## Run
 
 All commands from `eval/phoenix/`:
 
 ```bash
-# 1. Start Phoenix (UI at :6006) — separate terminal, isolated env via uvx
+# 1. Start Phoenix (UI at :6006) — separate terminal
 uvx arize-phoenix serve
+# If uvx is not available, use one of these alternatives:
+#   uv tool run arize-phoenix serve
+#   pip install arize-phoenix && python -m phoenix.server.main serve
 
-# 2. List, validate, then upload a dataset (one-time)
+# 2. List, validate, then upload a dataset (one-time per dataset)
 uv run create_dataset.py --list
 uv run create_dataset.py --dataset-name gsa-eval-0 --dry-run
 uv run create_dataset.py --dataset-name gsa-eval-0
+uv run create_dataset.py --dataset-name gsa-weather-eval-0
+uv run create_dataset.py --dataset-name gsa-weather-forecast-eval-0
 
-# 3. Run experiments (target comes from the dataset)
+# 3. Run experiments (target comes from datasets.yaml, or override with --target)
 uv run run_experiment.py --dataset-name gsa-eval-0
 uv run run_experiment.py --dataset-name gsa-eval-0 --system-prompt-version v2
+uv run run_experiment.py --dataset-name gsa-eval-0 --target combined
+uv run run_experiment.py --dataset-name gsa-weather-eval-0
 uv run run_experiment.py --dataset-name gsa-weather-forecast-eval-0
 
-# Optional: one-off smoke test of the agent against either server
-uv run agent.py --target jdp
+# Optional: one-off smoke test of the agent (no dataset, no judges)
+uv run agent.py --target combined
+uv run agent.py --target jdp "How many GSA-owned buildings over 50k RSF are in Texas?"
 uv run agent.py --target weather-forecast "What is the location code of 'Whitten'?"
 ```
 
@@ -95,15 +106,19 @@ question itself.
 
 ```
 eval/phoenix/
-├── agent.py            # MCPToolkitAgent + TARGETS (stdio launch + LangChain agent)
+├── agent.py            # MCPToolkitAgent + TARGETS (jdp, weather-forecast, combined)
 ├── create_dataset.py   # CLI: validate/upload CSV datasets to Phoenix
 ├── run_experiment.py   # CLI: agent + judges against a Phoenix dataset
 ├── datasets.yaml       # dataset registry (each entry names its target)
 ├── judges/             # correctness judge + per-target scope judge
 ├── prompts/
 │   ├── jdp/                # system_prompt_v1 (basic), v2 (+ scope boundaries)
-│   └── weather-forecast/   # system_prompt_v1 (basic), v2 (+ scope boundaries)
-└── datasets/<name>/        # examples/<name>.csv (+ evaluation.xml source where present)
+│   ├── weather-forecast/   # system_prompt_v1 (basic), v2 (+ scope boundaries)
+│   └── combined/           # system_prompt_v1 — covers all 9 tools
+└── datasets/
+    ├── gsa-eval-0/              # examples/gsa-eval-0.csv
+    ├── gsa-weather-eval-0/      # examples/gsa-weather-eval-0.csv
+    └── gsa-weather-forecast-eval-0/  # evaluation.xml + examples/*.csv
 ```
 
 ## Datasets
@@ -131,6 +146,19 @@ eval/phoenix/
    `prompts/<target>/` folder, and a scope template in
    `judges/relevance_judge.py`.
 
+## Tool tests (no gateway required)
+
+All 9 tools in `server_combined.py` are tested directly (no USAi gateway
+needed) in `tests/test_agent_tools.py` at the repo root:
+
+```bash
+# from the repo root
+uv run pytest tests/test_agent_tools.py -v   # 17 tests, all 9 tools
+```
+
+These simulate the exact calls the agent makes and verify each tool returns
+correct output against the live public APIs.
+
 ## Interpreting failures
 
 | Failure pattern | Likely root cause | Fix |
@@ -140,3 +168,4 @@ eval/phoenix/
 | Agent returns correct facts but judge marks incorrect | Judge template too strict | Relax correctness template |
 | Agent answers out-of-scope questions | System prompt scope section too weak | Strengthen `system_prompt_v2.txt` |
 | Agent never calls tools | System prompt missing tool-use instruction | Add explicit "always use tools" instruction |
+| `Connection error` on run | USAi gateway unreachable | Check VPN / confirm `USAI_BASE_URL` in `.env` |
