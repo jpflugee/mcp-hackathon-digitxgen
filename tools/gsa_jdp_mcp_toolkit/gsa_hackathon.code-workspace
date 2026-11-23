@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../../.."
+		},
+		{
+			"name": "gsa_weather_forecast",
+			"path": "../.."
+		}
+	],
+	"settings": {}
+}

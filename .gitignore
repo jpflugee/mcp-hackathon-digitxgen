@@ -1,5 +1,6 @@
 .venv/
 venv/
+.env
 __pycache__/
 *.pyc
 *.pyo
@@ -8,3 +9,4 @@ __pycache__/
 *.gz
 .vscode/
 .env
+jdpclip.txt

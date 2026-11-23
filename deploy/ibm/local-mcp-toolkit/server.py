@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # The GSA JDP server defines `mcp` at module level and guards mcp.run() under
 # __main__, so importing it here is safe — it won't start the server on import.
-import server as _gsa_server  # noqa: E402
+import server_combined as _gsa_server  # noqa: E402
 
 if __name__ == "__main__":
     # stdio is the transport watsonx Orchestrate uses for local MCP toolkits.

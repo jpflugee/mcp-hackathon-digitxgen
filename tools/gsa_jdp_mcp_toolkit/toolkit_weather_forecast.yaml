@@ -1,0 +1,12 @@
+spec_version: v1
+kind: mcp
+name: gsa-mar-weather-forecast
+description: >
+  GSA MAR weather forecast toolkit — combined historical weather (Open-Meteo archive)
+  and NWS 7-day forecast for one or more GSA buildings. Supports temperature,
+  precipitation, humidity, and wind. Returns formatted text tables for chat.
+  No API key required.
+command: python server_weather_forecast.py
+package_root: .
+tools:
+  - "*"

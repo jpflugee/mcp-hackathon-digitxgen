@@ -20,6 +20,11 @@ set -euo pipefail
 : "${WXO_ENV_NAME:?set WXO_ENV_NAME (source deploy/ibm/local-mcp-toolkit/.env)}"
 : "${WXO_INSTANCE_URL:?set WXO_INSTANCE_URL}"
 : "${TOOLKIT_NAME:?set TOOLKIT_NAME}"
+: "${SERVICENOW_INSTANCE:?set SERVICENOW_INSTANCE in deploy/ibm/local-mcp-toolkit/.env}"
+: "${SERVICENOW_CLIENT_ID:?set SERVICENOW_CLIENT_ID in deploy/ibm/local-mcp-toolkit/.env}"
+: "${SERVICENOW_CLIENT_SECRET:?set SERVICENOW_CLIENT_SECRET in deploy/ibm/local-mcp-toolkit/.env}"
+: "${SERVICENOW_USER:?set SERVICENOW_USER in deploy/ibm/local-mcp-toolkit/.env}"
+: "${SERVICENOW_PASSWORD:?set SERVICENOW_PASSWORD in deploy/ibm/local-mcp-toolkit/.env}"
 
 # This script lives in the kit dir; toolkit.yaml sits next to it.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,7 +78,8 @@ orchestrate env list
 echo "=== Staging minimal package_root at ${STAGE_DIR} ==="
 rm -rf "${STAGE_DIR}"
 mkdir -p "${STAGE_DIR}"
-cp "${GSA_TOOLKIT_DIR}/server.py" "${STAGE_DIR}/server.py"
+cp "${SCRIPT_DIR}/server.py" "${STAGE_DIR}/server.py"
+cp "${GSA_TOOLKIT_DIR}/server_combined.py" "${STAGE_DIR}/server_combined.py"
 cp "${GSA_TOOLKIT_DIR}/requirements.txt" "${STAGE_DIR}/requirements.txt"
 # Drop any caches.
 find "${STAGE_DIR}" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
@@ -81,8 +87,35 @@ STAGE_SIZE="$(du -sh "${STAGE_DIR}" | cut -f1)"
 echo "  staged package_root size: ${STAGE_SIZE}"
 
 # --- Generate the toolkit spec pointing at the staging dir --------------------
+# Inject ServiceNow credential values from env using Python (handles special
+# characters safely — never stored in toolkit.yaml).
 sed -E "s#^package_root:.*#package_root: ${STAGE_DIR}#" \
-  "${SCRIPT_DIR}/toolkit.yaml" > "${TOOLKIT_YAML}"
+  "${SCRIPT_DIR}/toolkit.yaml" > "${TOOLKIT_YAML}.tmp"
+
+python3 - "${TOOLKIT_YAML}.tmp" "${TOOLKIT_YAML}" << PYEOF
+import sys, yaml
+
+src, dst = sys.argv[1], sys.argv[2]
+import os
+
+with open(src) as f:
+    doc = yaml.safe_load(f)
+
+creds = {
+    "SERVICENOW_INSTANCE":       os.environ["SERVICENOW_INSTANCE"],
+    "SERVICENOW_CLIENT_ID":      os.environ["SERVICENOW_CLIENT_ID"],
+    "SERVICENOW_CLIENT_SECRET":  os.environ["SERVICENOW_CLIENT_SECRET"],
+    "SERVICENOW_USER":           os.environ["SERVICENOW_USER"],
+    "SERVICENOW_PASSWORD":       os.environ["SERVICENOW_PASSWORD"],
+}
+
+doc["env"] = [{"name": k, "value": v} for k, v in creds.items()]
+
+with open(dst, "w") as f:
+    yaml.dump(doc, f, default_flow_style=False, allow_unicode=True)
+PYEOF
+
+rm -f "${TOOLKIT_YAML}.tmp"
 
 # --- Import (or re-import) the local MCP toolkit ------------------------------
 echo "=== Importing local MCP toolkit '${TOOLKIT_NAME}' ==="

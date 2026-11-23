@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "gsa-jdp-toolkit": {
+      "command": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/.venv/bin/python3",
+      "args": ["server.py"],
+      "cwd": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/tools/gsa_jdp_mcp_toolkit"
+    },
+    "gsa-mar-analytics": {
+      "command": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/.venv/bin/python3",
+      "args": ["server_analytics.py"],
+      "cwd": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/tools/gsa_jdp_mcp_toolkit"
+    },
+    "gsa-mar-weather-forecast": {
+      "command": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/.venv/bin/python3",
+      "args": ["server_weather_forecast.py"],
+      "cwd": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/tools/gsa_jdp_mcp_toolkit"
+    },
+    "gsa-mar-prompts": {
+      "command": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/.venv/bin/python3",
+      "args": ["server_prompts.py"],
+      "cwd": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/tools/gsa_jdp_mcp_toolkit"
+    },
+    "gsa-combined-toolkit": {
+      "command": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/.venv/bin/python3",
+      "args": ["server_combined.py"],
+      "cwd": "/home/itzuser/Documents/gsa-router-failure/mcp-hackathon-digitxgen/tools/gsa_jdp_mcp_toolkit"
+    }
+  }
+}

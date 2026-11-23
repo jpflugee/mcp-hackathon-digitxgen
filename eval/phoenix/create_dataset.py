@@ -1,27 +1,16 @@
-"""create_dataset.py — upload a GSA eval CSV dataset to Arize Phoenix.
+"""CLI: validate a CSV dataset and upload it to Phoenix.
 
-Usage:
-    # List registered datasets
+Usage (from eval/phoenix/):
     uv run create_dataset.py --list
-
-    # Validate CSV without uploading (dry-run)
     uv run create_dataset.py --dataset-name gsa-eval-0 --dry-run
-
-    # Upload to Phoenix
     uv run create_dataset.py --dataset-name gsa-eval-0
-
-    # Upload with a custom Phoenix dataset name
-    uv run create_dataset.py --dataset-name gsa-eval-0 --phoenix-name my-gsa-eval
-
-    # Override CSV path
-    uv run create_dataset.py --dataset-name gsa-eval-0 --csv-path /tmp/custom.csv
-
-Run from eval/phoenix/:
-    cd eval/phoenix && uv run create_dataset.py --dataset-name gsa-eval-0
+    uv run create_dataset.py --dataset-name gsa-weather-forecast-eval-0
 """
+
+from __future__ import annotations
+
 import argparse
 import os
-import pathlib
 import sys
 
 import pandas as pd
@@ -30,102 +19,86 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_HERE = pathlib.Path(__file__).parent
-_DATASETS_YAML = _HERE / "datasets.yaml"
-_PHOENIX_ENDPOINT = os.getenv("PHOENIX_HOST", "http://localhost:6006")
+HERE = os.path.dirname(os.path.abspath(__file__))
+REGISTRY_PATH = os.path.join(HERE, "datasets.yaml")
+PHOENIX_ENDPOINT = os.getenv("PHOENIX_HOST", "http://localhost:6006")
 
 
-def _load_registry() -> dict:
-    with open(_DATASETS_YAML) as f:
-        return yaml.safe_load(f).get("datasets", {})
+def load_registry() -> dict:
+    with open(REGISTRY_PATH, encoding="utf-8") as fh:
+        return yaml.safe_load(fh)["datasets"]
 
 
-def _resolve_csv(registry: dict, dataset_name: str, csv_override: str | None) -> pathlib.Path:
-    if csv_override:
-        return pathlib.Path(csv_override)
-    if dataset_name not in registry:
-        print(f"ERROR: dataset '{dataset_name}' not found in datasets.yaml.", file=sys.stderr)
-        sys.exit(1)
-    return _HERE / registry[dataset_name]["csv_path"]
-
-
-def _validate(csv_path: pathlib.Path, registry: dict, dataset_name: str) -> pd.DataFrame:
-    if not csv_path.exists():
-        print(f"ERROR: CSV not found at {csv_path}", file=sys.stderr)
-        sys.exit(1)
-
+def load_and_validate(entry: dict, csv_override: str | None = None) -> pd.DataFrame:
+    csv_path = csv_override or os.path.join(HERE, entry["csv_path"])
+    if not os.path.exists(csv_path):
+        sys.exit(f"CSV not found: {csv_path}")
     df = pd.read_csv(csv_path)
-    entry = registry.get(dataset_name, {})
-    required_cols = (entry.get("input_keys", []) + entry.get("output_keys", []))
-
-    missing = [c for c in required_cols if c not in df.columns]
+    required = list(entry["input_keys"]) + list(entry["output_keys"])
+    missing = [c for c in required if c not in df.columns]
     if missing:
-        print(
-            f"ERROR: CSV is missing required columns: {missing}\n"
-            f"Available columns: {list(df.columns)}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    print(f"✓ CSV validated: {csv_path} ({len(df)} rows, columns: {list(df.columns)})")
+        sys.exit(f"CSV {csv_path} is missing required column(s): {missing}")
+    empty = [c for c in required if df[c].isna().any()]
+    if empty:
+        sys.exit(f"CSV {csv_path} has empty values in column(s): {empty}")
     return df
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Upload a GSA eval CSV dataset to Arize Phoenix."
-    )
-    parser.add_argument("--list", action="store_true", help="List registered datasets and exit.")
-    parser.add_argument("--dataset-name", help="Key in datasets.yaml to upload.")
+    parser = argparse.ArgumentParser(description="Upload a CSV dataset to Phoenix")
+    parser.add_argument("--list", action="store_true", help="List registered datasets")
+    parser.add_argument("--dataset-name", help="Dataset name from datasets.yaml")
     parser.add_argument(
-        "--phoenix-name",
-        default=None,
-        help="Dataset name in Phoenix (defaults to --dataset-name).",
+        "--phoenix-name", help="Name to use in Phoenix (default: --dataset-name)"
     )
-    parser.add_argument("--csv-path", default=None, help="Override CSV path.")
+    parser.add_argument("--csv-path", help="Override the registered CSV path")
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Validate CSV without uploading to Phoenix.",
+        "--dry-run", action="store_true", help="Validate the CSV without uploading"
     )
     parser.add_argument(
         "--phoenix-endpoint",
-        default=_PHOENIX_ENDPOINT,
-        help=f"Phoenix host URL (default: {_PHOENIX_ENDPOINT}).",
+        default=PHOENIX_ENDPOINT,
+        help=f"Phoenix host URL (default: {PHOENIX_ENDPOINT})",
     )
     args = parser.parse_args()
 
-    registry = _load_registry()
+    registry = load_registry()
 
     if args.list:
-        print("Registered datasets:")
-        for name, meta in registry.items():
-            print(f"  {name}: {meta.get('description', '')}")
+        for name, entry in registry.items():
+            print(
+                f"{name} [{entry.get('target', '-')}]: {entry['csv_path']}\n"
+                f"    {entry.get('description', '')}"
+            )
         return
 
     if not args.dataset_name:
-        parser.error("--dataset-name is required (or use --list).")
+        parser.error("--dataset-name is required (or use --list)")
+    if args.dataset_name not in registry:
+        sys.exit(
+            f"Unknown dataset '{args.dataset_name}'. "
+            f"Registered: {', '.join(registry)}"
+        )
 
-    csv_path = _resolve_csv(registry, args.dataset_name, args.csv_path)
-    df = _validate(csv_path, registry, args.dataset_name)
+    entry = registry[args.dataset_name]
+    df = load_and_validate(entry, args.csv_path)
+    print(f"Loaded {len(df)} examples from {args.csv_path or entry['csv_path']}")
 
     if args.dry_run:
-        print("Dry-run complete — no data uploaded.")
+        print("Dry run: validation passed, nothing uploaded.")
         return
 
-    # ── Upload to Phoenix ─────────────────────────────────────────────────────
-    from phoenix.client import Client  # noqa: PLC0415
+    from phoenix.client import Client
 
-    phoenix_name = args.phoenix_name or args.dataset_name
     client = Client(base_url=args.phoenix_endpoint)
-
     dataset = client.datasets.create_dataset(
-        name=phoenix_name,
+        name=args.phoenix_name or args.dataset_name,
         dataframe=df,
-        input_keys=registry.get(args.dataset_name, {}).get("input_keys", ["query"]),
-        output_keys=registry.get(args.dataset_name, {}).get("output_keys", ["responses"]),
+        input_keys=list(entry["input_keys"]),
+        output_keys=list(entry["output_keys"]),
     )
-    print(f"✓ Dataset uploaded to Phoenix as '{phoenix_name}' (id={dataset.id})")
+    print(f"Uploaded dataset '{args.phoenix_name or args.dataset_name}' to Phoenix.")
+    print(dataset)
 
 
 if __name__ == "__main__":

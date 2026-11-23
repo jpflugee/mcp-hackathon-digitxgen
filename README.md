@@ -20,15 +20,27 @@ This template gives you a working server with one example of each, so you can re
 mcp-hackathon-template/
 ├── README.md                  # This file
 ├── QUICKSTART.md              # 5-minute clone → run → connect walkthrough
+├── SECURITY.md                # Vulnerability disclosure policy + hackathon security notes
+├── LICENSE                    # MIT
 ├── main.py                    # Local entry point (uv run python main.py)
 ├── pyproject.toml             # Package + dependencies (uv)
 ├── requirements.txt           # Mirror of runtime deps (for buildpack hosts)
+├── uv.lock                    # Locked dependency versions
+├── .python-version            # Python version pin (used by uv)
 ├── Dockerfile                 # Container image (streamable-HTTP, port 8080)
-├── manifest.yaml              # cloud.gov (Cloud Foundry) deploy
+├── manifest.yaml              # cloud.gov (Cloud Foundry) deploy manifest
 ├── server.json                # MCP registry metadata
 ├── .env.example               # Copy to .env for local dev
-├── .github/workflows/ci.yml   # Lint + test on push/PR
-├── docs/                      # Vendor-contributed reference materials
+├── .mcp.json                  # MCP client config (Claude Desktop / Claude Code)
+├── workspace_config.yaml      # Bob agent workspace configuration
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # Lint + test on every push / PR
+├── docs/
+│   └── README.md              # Vendor-contributed reference materials notice
+├── agents/
+│   ├── gsa_jdp_agent.yaml     # wxO agent definition for the JDP toolkit
+│   └── gsa_mar_agent.yaml     # wxO agent definition for the MAR toolkit
 ├── src/
 │   └── example_server/        # ← rename to your service
 │       ├── app.py             # Thin entry point: builds FastMCP, picks transport
@@ -36,7 +48,7 @@ mcp-hackathon-template/
 │       ├── models.py          # Pydantic models & enums for tool params
 │       ├── utils.py           # Shared helpers (HTTP client, pagination)
 │       ├── routes.py          # HTTP-only routes (/health, /version)
-│       ├── tools/             # ONE FILE PER TOOL
+│       ├── tools/
 │       │   ├── __init__.py    #   register_tools(mcp) aggregator
 │       │   └── example_tool.py
 │       ├── prompts/
@@ -45,11 +57,50 @@ mcp-hackathon-template/
 │       └── resources/
 │           ├── __init__.py    #   register_resources(mcp) aggregator
 │           └── example.py
-├── tests/                     # Import + registration smoke tests
-├── eval/                      # Stub → build a Phoenix eval harness (see mcp-eval skill)
+├── tools/
+│   └── gsa_jdp_mcp_toolkit/   # GSA AutoNOC Polaris toolkit servers
+│       ├── README.md          # Toolkit docs (servers, tools, testing, eval)
+│       ├── requirements.txt   # Standalone pip install (mcp, requests, matplotlib, seaborn)
+│       ├── server.py          # JDP core: locations, weather, alerts, ServiceNow (5 tools)
+│       ├── server_weather_forecast.py  # MAR: forecast text table + PNG chart (2 tools)
+│       ├── server_analytics.py         # MAR: comms outage scan + building (2 tools)
+│       ├── server_prompts.py           # MAR: 7 reusable prompt starters
+│       ├── server_combined.py          # All 9 tools in one stdio process (default eval target)
+│       ├── toolkit.yaml                # wxO import config → server.py
+│       ├── toolkit_weather_forecast.yaml  # wxO import config → server_weather_forecast.py
+│       ├── toolkit_analytics.yaml         # wxO import config → server_analytics.py
+│       ├── toolkit_prompts.yaml           # wxO import config → server_prompts.py
+│       └── toolkit_combined.yaml          # wxO import config → server_combined.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_server.py         # Example server import + registration smoke tests
+│   ├── test_toolkit_tools.py  # 25 direct-call tests — individual toolkit servers
+│   └── test_agent_tools.py    # 17 agent-style tests — all 9 tools via server_combined.py
+├── eval/
+│   ├── README.md              # Why evaluate, what's built, quick-start
+│   └── phoenix/               # Arize Phoenix eval harness
+│       ├── pyproject.toml     # Separate uv project (mcp<2 constraint)
+│       ├── uv.lock
+│       ├── agent.py           # MCPToolkitAgent — targets: jdp, weather-forecast, combined
+│       ├── create_dataset.py  # CLI: upload CSV datasets to Phoenix
+│       ├── run_experiment.py  # CLI: run agent + LLM-as-judge against a dataset
+│       ├── datasets.yaml      # 3 registered datasets
+│       ├── judges/            # Correctness + per-target scope LLM judges
+│       ├── prompts/
+│       │   ├── jdp/           #   system_prompt_v1.txt, v2.txt
+│       │   ├── weather-forecast/  # system_prompt_v1.txt, v2.txt
+│       │   └── combined/      #   system_prompt_v1.txt (all 9 tools)
+│       └── datasets/
+│           ├── gsa-eval-0/            # 10 gold Q/A — locations, weather, alerts, ServiceNow
+│           ├── gsa-weather-eval-0/    # 10 gold Q/A — weather + alerts at GSA sites
+│           └── gsa-weather-forecast-eval-0/  # 12 Q/A — forecast tables, unit invariants
 └── deploy/
-    ├── README.md              # Which deployment kit to use
-    ├── ibm/                   # watsonx Orchestrate: 3 kits (see below)
+    ├── README.md              # Deployment kit chooser
+    ├── ibm/                   # watsonx Orchestrate — 3 kits
+    │   ├── README.md
+    │   ├── local-mcp-toolkit/ #   stdio inside Orchestrate (lowest overhead)
+    │   ├── code-engine-git-build/  # build from Git → Code Engine
+    │   └── prebuilt-image/    #   deploy a prebuilt image to Code Engine
     └── databricks/            # Databricks Apps kit
 ```
 
@@ -180,7 +231,7 @@ contribution guidance.
 
 ## Evaluations
 
-Measuring how well an LLM can use your tools is the real test of server quality. This template intentionally does **not** ship an eval harness — see [eval/README.md](eval/README.md) for how to build one with the `mcp-eval` skill.
+An Arize Phoenix eval harness is fully built in [`eval/phoenix/`](eval/phoenix/). It measures how well an LLM agent can use the GSA toolkit tools to answer realistic questions, scoring each answer with two LLM-as-judge evaluators (correctness + scope). Three targets are supported: `jdp`, `weather-forecast`, and `combined` (all 9 tools). See [eval/README.md](eval/README.md) for the quick-start and [eval/phoenix/README.md](eval/phoenix/README.md) for the full setup.
 
 ---
 

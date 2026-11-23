@@ -7,8 +7,10 @@ requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.0.0",
     "httpx>=0.27.0",
+    "matplotlib>=3.11.2",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
+    "seaborn>=0.13.2",
 ]
 
 [project.scripts]
@@ -23,26 +25,20 @@ build-backend = "hatchling.build"
 packages = ["src/example_server"]
 
 [dependency-groups]
-# Dev + eval-only deps. Install with `uv sync --group dev`.
-# The Phoenix evaluation harness (see eval/) is not scaffolded in this template
-# on purpose — add these when you build it per the mcp-eval skill.
+# Dev deps. Install with `uv sync --group dev`.
+# `requests` is here so the tools/gsa_jdp_mcp_toolkit stdio servers can run in
+# this venv (the eval harness launches them with this venv's python).
+# The Phoenix eval harness itself is a SEPARATE uv project (eval/phoenix/) —
+# its langchain-mcp-adapters needs mcp<2 while the toolkit needs mcp>=2.
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.6.0",
-    # Phoenix evaluation harness (eval/phoenix/)
-    "arize-phoenix>=18.0.0",
-    "arize-phoenix-client>=2.13.0",
-    "arize-phoenix-evals>=3.1.1",
-    "langchain>=0.3.0",
-    "langchain-mcp-adapters @ git+https://github.com/langchain-ai/langchain-mcp-adapters.git@v0.4",
-    "langchain-openai>=0.3.0",
-    "openinference-instrumentation-langchain>=0.1.67",
-    "opentelemetry-exporter-otlp>=1.43.0",
-    "opentelemetry-sdk>=1.43.0",
-    "pandas>=2.0.0",
-    "pyyaml>=6.0.0",
     "requests>=2.31.0",
+    # Makes requests/pip trust the OS certificate store — required on machines
+    # behind corporate TLS interception (otherwise the toolkit servers' HTTPS
+    # calls fail certificate verification); harmless elsewhere.
+    "pip-system-certs>=4.0",
 ]
 
 [tool.ruff]
@@ -59,3 +55,6 @@ select = ["E", "F", "I"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "network: marks tests that make live network/API calls (deselect with -m 'not network')",
+]
